@@ -17,6 +17,8 @@
 
 package edu.berkeley.cs.amplab.spark.indexedrdd.impl
 
+import java.util.NoSuchElementException
+
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
 
@@ -208,6 +210,69 @@ private[indexedrdd] class PARTPartition[K, V]
     PARTPartition[K, V2, V2](elems, (id, a) => a, (id, a, b) => reduceFunc(a, b))
 
   override def reindex(): IndexedRDDPartition[K, V] = this
+
+  override def applyDelta(other: Iterator[(K, V)])(f: (V, V) => V): IndexedRDDPartition[K, V] = {
+    val newMap = map.snapshot()
+    for (ku <- other) {
+      val kBytes = kSer.toBytes(ku._1)
+      val oldV = newMap.search(kBytes)
+      if (oldV != null) {
+        newMap.delete(kBytes)
+        val newV = f(oldV.asInstanceOf[V], ku._2)
+        if (newV != null) {
+          newMap.insert(kBytes, newV)
+        }
+      } else {
+        newMap.insert(kBytes, ku._2)
+      }
+    }
+    this.withMap[V](newMap)
+  }
+
+  // TODO assumes all elements of other are present in map
+  override def select[V2: ClassTag](other: Iterator[(K, V2)]): Iterator[(K, V)] = {
+    val mapRef = map
+    new Iterator[(K, V)] {
+      var cachedNext: (K, V) = null
+
+      def cacheNext: Unit = {
+        while (other.hasNext) {
+          val next = other.next
+          val nextVal = mapRef.search(kSer.toBytes(next._1))
+          if (nextVal != null) {
+            cachedNext = (next._1, nextVal.asInstanceOf[V])
+            return
+          }
+        }
+      }
+
+      def getAndUnsetCachedNext: (K, V) = {
+        val oldCachedNext = cachedNext
+        cachedNext = null
+        return oldCachedNext
+      }
+
+      override def hasNext: Boolean = {
+        if (cachedNext != null) {
+          return true
+        }
+        cacheNext
+        return cachedNext != null
+      }
+
+      override def next(): (K, V) = {
+        if (cachedNext != null) {
+          return getAndUnsetCachedNext
+        }
+        cacheNext
+        if (cachedNext != null) {
+          return getAndUnsetCachedNext
+        } else {
+          throw new NoSuchElementException
+        }
+      }
+    }
+  }
 }
 
 private[indexedrdd] object PARTPartition {

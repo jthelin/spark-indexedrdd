@@ -22,6 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.HashPartitioner
 
 import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.scalatest.FunSuite
 

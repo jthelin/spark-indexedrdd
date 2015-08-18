@@ -84,3 +84,29 @@ class StringSerializer extends KeySerializer[String] {
     new String(result)
   }
 }
+
+class AnySerializer extends KeySerializer[Any] {
+  private val longSer = new LongSerializer
+  private val stringSer = new StringSerializer
+  private var ser: KeySerializer[_] = null
+
+  override def toBytes(k: Any): Array[Byte] = {
+    if (ser == null) {
+      if (k.isInstanceOf[String]) {
+        ser = stringSer
+      } else if (k.isInstanceOf[Long]) {
+        ser = longSer
+      } else {
+        throw new IllegalArgumentException("key of class " + k.getClass)
+      }
+    }
+    ser.asInstanceOf[KeySerializer[Any]].toBytes(k)
+  }
+
+  override def fromBytes(b: Array[Byte]): Any = {
+    if (ser == null) {
+      throw new IllegalStateException("ser is null!")
+    }
+    ser.asInstanceOf[KeySerializer[Any]].fromBytes(b)
+  }
+}

@@ -8,7 +8,7 @@ scalaVersion := "2.10.4"
 
 spName := "amplab/spark-indexedrdd"
 
-sparkVersion := "1.3.0"
+sparkVersion := "1.2.1"
 
 sparkComponents += "core"
 
@@ -30,7 +30,7 @@ pomExtra := (
     </developer>
   </developers>)
 
-libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.4" % "test"
+libraryDependencies += "org.scalatest" %% "scalatest" % "1.9.2" % "test"
 
 resolvers += "Repo at github.com/ankurdave/maven-repo" at "https://github.com/ankurdave/maven-repo/raw/master"
 

@@ -69,7 +69,10 @@ class IndexedRDD[K: ClassTag, V: ClassTag](
 
   /** Provides the `RDD[(K, V)]` equivalent output. */
   override def compute(part: Partition, context: TaskContext): Iterator[(K, V)] = {
-    firstParent[IndexedRDDPartition[K, V]].iterator(part, context).next.iterator
+    val t = System.currentTimeMillis()
+    val i = firstParent[IndexedRDDPartition[K, V]].iterator(part, context).next.iterator
+    println("Compute time: " + (System.currentTimeMillis() - t))
+    i
   }
 
   /** Gets the value corresponding to the specified key, if any. */
@@ -167,6 +170,13 @@ class IndexedRDD[K: ClassTag, V: ClassTag](
     new IndexedRDD(newPartitionsRDD)
   }
 
+  /** Applies a function to corresponding partitions of `this` and a pair RDD. */
+  private def zipPartitionsWithOtherPlain[V2: ClassTag, V3: ClassTag](other: RDD[(K, V2)])
+        (f: OtherZipPartitionsFunctionPlain[V2, V3]): RDD[(K, V3)] = {
+    val partitioned = other.partitionBy(partitioner.get)
+    partitionsRDD.zipPartitions(partitioned, true)(f)
+  }
+
   /**
    * Restricts the entries to those satisfying the given predicate. This operation preserves the
    * index for efficient joins with the original IndexedRDD and is implemented using soft deletions.
@@ -223,6 +233,14 @@ class IndexedRDD[K: ClassTag, V: ClassTag](
       this.zipPartitionsWithOther(other)(new OtherJoinZipper(f))
   }
 
+  def applyDelta(other: RDD[(K, V)])(f: (V, V) => V): IndexedRDD[K, V] = {
+    this.zipPartitionsWithOther(other)(new ApplyDeltaZipper(f))
+  }
+
+  def select[V2: ClassTag](other: RDD[(K, V2)]): RDD[(K, V)] = {
+    this.zipPartitionsWithOtherPlain(other)(new SelectZipper)
+  }
+
   /** Left outer joins `this` with `other`, running `f` on all values of `this`. */
   def leftJoin[V2: ClassTag, V3: ClassTag]
       (other: RDD[(K, V2)])(f: (K, V, Option[V2]) => V3): IndexedRDD[K, V3] = other match {
@@ -272,6 +290,10 @@ class IndexedRDD[K: ClassTag, V: ClassTag](
   private type OtherZipPartitionsFunction[V2, V3] =
     Function2[Iterator[IndexedRDDPartition[K, V]], Iterator[(K, V2)],
       Iterator[IndexedRDDPartition[K, V3]]]
+
+  private type OtherZipPartitionsFunctionPlain[V2, V3] =
+  Function2[Iterator[IndexedRDDPartition[K, V]], Iterator[(K, V2)],
+    Iterator[(K, V3)]]
 
   private class MultiputZipper[U](z: (K, U) => V, f: (K, V, U) => V)
       extends OtherZipPartitionsFunction[U, V] with Serializable {
@@ -340,6 +362,20 @@ class IndexedRDD[K: ClassTag, V: ClassTag](
     def apply(thisIter: Iterator[IndexedRDDPartition[K, V]], otherIter: Iterator[(K, U)]): Iterator[IndexedRDDPartition[K, V]] = {
       val thisPart = thisIter.next()
       Iterator(thisPart.join(otherIter)(f))
+    }
+  }
+
+  private class ApplyDeltaZipper(f: (V, V) => V) extends OtherZipPartitionsFunction[V, V] with Serializable {
+    def apply(thisIter: Iterator[IndexedRDDPartition[K, V]], otherIter: Iterator[(K, V)]): Iterator[IndexedRDDPartition[K, V]] = {
+      val thisPart = thisIter.next()
+      Iterator(thisPart.applyDelta(otherIter)(f))
+    }
+  }
+
+  private class SelectZipper[V2: ClassTag] extends OtherZipPartitionsFunctionPlain[V2, V] with Serializable {
+    def apply(thisIter: Iterator[IndexedRDDPartition[K, V]], otherIter: Iterator[(K, V2)]): Iterator[(K, V)] = {
+      val thisPart = thisIter.next()
+      thisPart.select(otherIter)
     }
   }
 

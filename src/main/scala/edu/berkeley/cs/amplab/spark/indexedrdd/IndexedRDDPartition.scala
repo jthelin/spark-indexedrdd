@@ -80,6 +80,10 @@ private[indexedrdd] abstract class IndexedRDDPartition[K, V] extends Serializabl
    */
   def diff(other: Iterator[(K, V)]): IndexedRDDPartition[K, V]
 
+  def applyDelta(other: Iterator[(K, V)])(f: (V, V) => V): IndexedRDDPartition[K, V]
+
+  def select[V2: ClassTag](other: Iterator[(K, V2)]): Iterator[(K, V)]
+
   /** Joins `this` with `other`, running `f` on the values of all keys in both sets. */
   def fullOuterJoin[V2: ClassTag, W: ClassTag]
       (other: IndexedRDDPartition[K, V2])
