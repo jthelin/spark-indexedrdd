@@ -1,6 +1,6 @@
 name := "spark-indexedrdd"
 
-version := "0.2-SNAPSHOT"
+version := "0.2-Deltas"
 
 organization := "edu.berkeley.cs.amplab"
 
