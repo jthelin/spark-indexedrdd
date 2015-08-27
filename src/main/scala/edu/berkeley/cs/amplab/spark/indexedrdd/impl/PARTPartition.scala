@@ -211,12 +211,21 @@ private[indexedrdd] class PARTPartition[K, V]
 
   override def reindex(): IndexedRDDPartition[K, V] = this
 
+  /**
+   *
+   * @param other the deltas, deltas whose keys are not already present are added to the IndexedRDD partition
+   *              and deltas whose keys are present are merged in according to f
+   * @param f function to merge the existing value with the delta value if the key for a delta
+   *          already exists. f can return null to indicate that the key should simply be deleted
+   *          from the IndexedRDD partition
+   */
   override def applyDelta(other: Iterator[(K, V)])(f: (V, V) => V): IndexedRDDPartition[K, V] = {
     val newMap = map.snapshot()
     for (ku <- other) {
       val kBytes = kSer.toBytes(ku._1)
       val oldV = newMap.search(kBytes)
       if (oldV != null) {
+        // TODO is doing delete then insert inefficient due to functional data structure?
         newMap.delete(kBytes)
         val newV = f(oldV.asInstanceOf[V], ku._2)
         if (newV != null) {
@@ -229,12 +238,22 @@ private[indexedrdd] class PARTPartition[K, V]
     this.withMap[V](newMap)
   }
 
-  // TODO assumes all elements of other are present in map
+  /**
+   *
+   * @param other The keys whose corresponding key-value pairs we want to select from the
+   *              IndexedRDD partition (V2 ignored). If a key in other is not present in this
+   *              IndexedRDD partition it is ignored.
+   * @tparam V2 ignored
+   * @return the selected key-value pairs
+   */
   override def select[V2: ClassTag](other: Iterator[(K, V2)]): Iterator[(K, V)] = {
     val mapRef = map
     new Iterator[(K, V)] {
+      // next key-value pair to return, or null if we haven't found it yet
       var cachedNext: (K, V) = null
 
+      // find next key from other that is present in this IndexedRDD partition and save
+      // the key-value pair from the partition
       def cacheNext: Unit = {
         while (other.hasNext) {
           val next = other.next

@@ -170,7 +170,11 @@ class IndexedRDD[K: ClassTag, V: ClassTag](
     new IndexedRDD(newPartitionsRDD)
   }
 
-  /** Applies a function to corresponding partitions of `this` and a pair RDD. */
+  /**
+   * Applies a function to corresponding partitions of `this` and a pair RDD.
+   * Different from zipPartitionsWithOther in that output is not constrained to
+   * be an IndexedRDD, which can save us work if we don't actually need an IndexedRDD.
+   */
   private def zipPartitionsWithOtherPlain[V2: ClassTag, V3: ClassTag](other: RDD[(K, V2)])
         (f: OtherZipPartitionsFunctionPlain[V2, V3]): RDD[(K, V3)] = {
     val partitioned = other.partitionBy(partitioner.get)
@@ -291,6 +295,8 @@ class IndexedRDD[K: ClassTag, V: ClassTag](
     Function2[Iterator[IndexedRDDPartition[K, V]], Iterator[(K, V2)],
       Iterator[IndexedRDDPartition[K, V3]]]
 
+  // this is useful when we don't need to pay the costs of making the output
+  // of a transformation an IndexedRDD
   private type OtherZipPartitionsFunctionPlain[V2, V3] =
   Function2[Iterator[IndexedRDDPartition[K, V]], Iterator[(K, V2)],
     Iterator[(K, V3)]]
